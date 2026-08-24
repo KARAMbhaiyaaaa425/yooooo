@@ -884,6 +884,12 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
     
+    # Clear any pending inputs when a button is clicked
+    keys_to_clear = ['awaiting_welcome', 'awaiting_welcome_media', 'awaiting_unmute', 'awaiting_welcome_voice', 'awaiting_admin', 'awaiting_global_start', 'awaiting_broadcast', 'ar_state']
+    for k in keys_to_clear:
+        if k in context.user_data:
+            context.user_data[k] = None
+            
     data = query.data
     
     if data == "tg_close":
@@ -1112,7 +1118,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = "8704551345:AAEOkqekUKiihKGyrlViCmNrsmuZCNF3nb4"
+TOKEN = "8725183047:AAH_vwJFgB8sfD2UcFEf46DBwyihB3Mi5WI"
 
 
 async def dm_media_handler(update: Update, context):
