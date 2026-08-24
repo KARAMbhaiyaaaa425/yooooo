@@ -911,6 +911,32 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"⚙️ <b>Settings for Group</b>", reply_markup=get_settings_keyboard(target_id), parse_mode="HTML")
         return
 
+    if data == "tg_help":
+        if str(user_id) != "8373276191":
+            await query.answer("Not authorized.", show_alert=True)
+            return
+        
+        help_text = (
+            "📚 **Bot Commands List**\n\n"
+            "**👑 Owner Commands (In DM):**\n"
+            "• /start - Open Central Panel\n"
+            "• /backup - Download Database Backup\n"
+            "• /restore - Restore Database (Reply to .db file)\n\n"
+            "**👮‍♂️ Admin Commands (In Group):**\n"
+            "• /settings - Open Group Settings\n"
+            "• /addword - Block a word (or reply to a gaali to delete & block it)\n"
+            "• /delword <word> - Unblock a word\n"
+            "• /listwords - See all blocked words\n"
+            "• /ban - Ban user (reply to message)\n"
+            "• /unban - Unban user (reply or ID)\n"
+            "• /kick - Kick user (reply)\n"
+            "• /mute - Mute user (reply)\n"
+            "• /unmute - Unmute user (reply)\n"
+        )
+        kb = [[InlineKeyboardButton("🔙 Back", callback_data="tg_close")]]
+        await query.edit_message_text(help_text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        return
+
     if data == "tg_gstart":
         if str(user_id) != "8373276191":
             await query.answer("Not authorized.", show_alert=True)
@@ -1086,7 +1112,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = "8704551345:AAEOkqekUKiihKGyrlViCmNrsmuZCNF3nb4"
+TOKEN = "8725183047:AAH_vwJFgB8sfD2UcFEf46DBwyihB3Mi5WI"
 
 
 async def dm_media_handler(update: Update, context):
