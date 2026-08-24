@@ -67,7 +67,9 @@ def init_db():
             media_audio INTEGER DEFAULT 1,
             media_poll INTEGER DEFAULT 1,
             word_blacklist INTEGER DEFAULT 0,
-            auto_accept_joins INTEGER DEFAULT 0
+            auto_accept_joins INTEGER DEFAULT 0,
+            anti_forward INTEGER DEFAULT 0,
+            media_apk INTEGER DEFAULT 1
         )
     ''')
     
@@ -133,6 +135,15 @@ def init_db():
         
     try:
         c.execute("ALTER TABLE groups ADD COLUMN auto_accept_joins INTEGER DEFAULT 0")
+    except:
+        pass
+        
+    try:
+        c.execute("ALTER TABLE groups ADD COLUMN anti_forward INTEGER DEFAULT 0")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE groups ADD COLUMN media_apk INTEGER DEFAULT 1")
     except:
         pass
         
@@ -525,6 +536,8 @@ async def filter_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not settings['media_voice'] and msg.voice: should_delete = True
     if not settings['media_audio'] and msg.audio: should_delete = True
     if not settings['media_poll'] and msg.poll: should_delete = True
+    if settings.get('anti_forward') and msg.forward_origin: should_delete = True
+    if not settings.get('media_apk', 1) and msg.document and getattr(msg.document, 'file_name', '') and msg.document.file_name.lower().endswith('.apk'): should_delete = True
     
     if should_delete:
         try: 
@@ -586,6 +599,7 @@ async def filter_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if word in text_lower:
                 try: 
                     await msg.delete()
+                    await context.bot.send_message(chat_id, f"{msg.from_user.mention_html()}, Kyu yaar, kya milega ye karke? 😅", parse_mode="HTML")
                 except: 
                     pass
                 return
@@ -621,12 +635,27 @@ async def addword_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if update.effective_chat.type == "private" or not await is_admin(context.bot, chat_id, update.effective_user.id):
         return
-    if not context.args:
-        await update.message.reply_text("Usage: /addword <word>")
+        
+    word = ""
+    if context.args:
+        word = " ".join(context.args).lower()
+    elif update.message.reply_to_message and update.message.reply_to_message.text:
+        word = update.message.reply_to_message.text.lower()
+        
+    if not word:
+        await update.message.reply_text("Usage: /addword <word>\nOr reply to a message with /addword")
         return
-    word = " ".join(context.args)
+        
     add_blacklist(chat_id, word)
-    await update.message.reply_text(f"✅ Added '{word}' to blacklist.")
+    
+    if update.message.reply_to_message:
+        try:
+            await update.message.reply_to_message.delete()
+            await update.message.reply_text("✅ Added to blacklist & deleted that message!")
+        except:
+            await update.message.reply_text("✅ Added to blacklist.")
+    else:
+        await update.message.reply_text("✅ Added to blacklist.")
 
 async def delword_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -808,6 +837,13 @@ def get_settings_keyboard(target_chat_id):
             InlineKeyboardButton(f"Block Stickers: {'❌' if settings['media_sticker'] else '✅'}", callback_data=f"tg_ms_{target_chat_id}")
         ],
         [
+            InlineKeyboardButton(f"Block Files/Docs: {'❌' if settings.get('media_doc', 1) else '✅'}", callback_data=f"tg_md_{target_chat_id}"),
+            InlineKeyboardButton(f"Block Forwards: {'✅' if settings.get('anti_forward') else '❌'}", callback_data=f"tg_afd_{target_chat_id}")
+        ],
+        [
+            InlineKeyboardButton(f"Block APKs (Apps): {'❌' if settings.get('media_apk', 1) else '✅'}", callback_data=f"tg_apk_{target_chat_id}")
+        ],
+        [
             InlineKeyboardButton("Set Welcome Video / Photo", callback_data=f"tg_wlmd_{target_chat_id}")
         ],
         [
@@ -899,7 +935,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'we': 'welcome_enabled', 'al': 'anti_link', 'af': 'anti_flood', 
             'wb': 'word_blacklist', 'mp': 'media_photo', 'mv': 'media_video', 
             'mg': 'media_gif', 'ms': 'media_sticker', 'dd': 'del_service_delay',
-            'aa': 'auto_accept_joins'
+            'aa': 'auto_accept_joins', 'md': 'media_doc', 'afd': 'anti_forward', 'apk': 'media_apk'
         }
         
         if key_code == 'wl':
@@ -1181,11 +1217,21 @@ async def dm_media_handler(update: Update, context):
             return
 
         target_id_v = context.user_data.get('awaiting_welcome_voice')
-        if target_id_v and update.message.voice:
-            update_group_setting(target_id_v, "welcome_voice_id", update.message.voice.file_id)
-            context.user_data['awaiting_welcome_voice'] = None
-            await update.message.reply_text("✅ Welcome Voice updated for the group!")
-            return
+        if target_id_v:
+            if update.message.text == "/cancel":
+                context.user_data['awaiting_welcome_voice'] = None
+                await update.message.reply_text("Cancelled.")
+                return
+            elif update.message.voice:
+                update_group_setting(target_id_v, "welcome_voice_id", update.message.voice.file_id)
+                context.user_data['awaiting_welcome_voice'] = None
+                await update.message.reply_text("✅ Welcome Voice updated for the group!")
+                return
+            elif update.message.audio:
+                update_group_setting(target_id_v, "welcome_voice_id", update.message.audio.file_id)
+                context.user_data['awaiting_welcome_voice'] = None
+                await update.message.reply_text("✅ Welcome Music/Audio updated for the group!")
+                return
             
         target_id_ad = context.user_data.get('awaiting_admin')
         if target_id_ad and update.message.text:
@@ -1239,9 +1285,10 @@ async def dm_media_handler(update: Update, context):
                 context.user_data['awaiting_welcome'] = None
                 await update.message.reply_text("Cancelled.")
                 return
-            update_group_setting(target_id, "welcome_text", update.message.text)
+            html_text = update.message.text_html_urled if hasattr(update.message, 'text_html_urled') else update.message.text_html
+            update_group_setting(target_id, "welcome_text", html_text)
             context.user_data['awaiting_welcome'] = None
-            await update.message.reply_text("✅ Welcome message updated for the group!")
+            await update.message.reply_text("✅ Welcome message updated for the group! (Premium Emojis Saved!)")
             return
         return
         
@@ -1285,6 +1332,51 @@ async def start_cmd(update: Update, context):
                     await update.message.reply_text("Hi! I am the Group Moderation Bot.")
             else:
                 await update.message.reply_text("Hi! I am the Group Moderation Bot. Add me to a group and use /settings inside the group to configure me!")
+
+
+async def backup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    if user_id != "8373276191":
+        return
+    try:
+        await context.bot.send_document(
+            chat_id=update.effective_chat.id, 
+            document=open(DB_FILE, "rb"),
+            caption="📦 Here is your Database Backup (mod_bot.db).\n\nTo restore this backup later, simply reply to this file with /restore.",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Error creating backup: {e}")
+
+async def restore_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    if user_id != "8373276191":
+        return
+    if not update.message.reply_to_message or not update.message.reply_to_message.document:
+        await update.message.reply_text("Please reply to a valid database backup file with /restore")
+        return
+        
+    doc = update.message.reply_to_message.document
+    if not doc.file_name.endswith('.db'):
+        await update.message.reply_text("This does not look like a valid database file.")
+        return
+        
+    try:
+        new_file = await context.bot.get_file(doc.file_id)
+        # Close old connection safely
+        global local
+        if hasattr(local, "conn"):
+            local.conn.close()
+            delattr(local, "conn")
+            
+        await new_file.download_to_drive(DB_FILE)
+        
+        # Re-init db
+        init_db()
+        await update.message.reply_text("✅ Database Restored Successfully! All settings and data are back.")
+    except Exception as e:
+        await update.message.reply_text(f"Failed to restore: {e}")
+
 
 def main():
     import asyncio
