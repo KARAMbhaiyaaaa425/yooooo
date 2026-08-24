@@ -1112,7 +1112,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = "8725183047:AAH_vwJFgB8sfD2UcFEf46DBwyihB3Mi5WI"
+TOKEN = "8704551345:AAEOkqekUKiihKGyrlViCmNrsmuZCNF3nb4"
 
 
 async def dm_media_handler(update: Update, context):
